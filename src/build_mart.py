@@ -1,9 +1,13 @@
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 import pyspark.sql.functions as F 
 
+import utils.config as cfg
+from utils.spark_session import get_spark_session
 
-INPUT_PATH = 'data/raw'
-OUTPUT_PATH = 'data/output'
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_visits(visits_raw: DataFrame) -> DataFrame:
@@ -136,22 +140,28 @@ def data_mart_build(visits_df: DataFrame, costs_df: DataFrame, campaigns_df: Dat
         )
 
 
-if __name__ == "__main__":
+def main():
+    logging.basicConfig(
+        level=logging.INFO, 
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+
     # Создание Spark сессиии
-    spark = SparkSession.builder \
-        .master("local[*]") \
-        .appName("spark-pipeline") \
-        .getOrCreate()
+    spark = get_spark_session()
 
     try:
         # Чтение входных данных из директории
-        visits_raw = spark.read.csv(f'{INPUT_PATH}/visits_clickhouse.csv', header = True)
-        costs_raw = spark.read.csv(f'{INPUT_PATH}/costs_postgres.csv', header = True)
-        campaigns_raw = spark.read.csv(f'{INPUT_PATH}/campaigns_dict.csv', header = True) 
-        submits_raw = spark.read.parquet(f'{INPUT_PATH}/submits.parquet')
-        deals_raw = spark.read.parquet(f'{INPUT_PATH}/deals.parquet')
+        logger.info(f"Чтение входных данных из {cfg.INPUT_PATH}")
+
+        visits_raw = spark.read.csv(f'{cfg.INPUT_PATH}/visits_clickhouse.csv', header = True)
+        costs_raw = spark.read.csv(f'{cfg.INPUT_PATH}/costs_postgres.csv', header = True)
+        campaigns_raw = spark.read.csv(f'{cfg.INPUT_PATH}/campaigns_dict.csv', header = True) 
+        submits_raw = spark.read.parquet(f'{cfg.INPUT_PATH}/submits.parquet')
+        deals_raw = spark.read.parquet(f'{cfg.INPUT_PATH}/deals.parquet')
 
         # Подготовка данных в отдельных функциях
+        logger.info(f"Обработка входных данных")
+
         visits_df = prepare_visits(visits_raw)
         costs_df = prepare_costs(costs_raw)
         campaigns_df = prepare_campaigns(campaigns_raw)
@@ -159,15 +169,25 @@ if __name__ == "__main__":
         deals_df = prepare_deals(deals_raw)
 
         # Сборка итоговой витрины данных
+        logger.info(f"Сборка витрины данных")
+
         customer_detailed = data_mart_build(visits_df, costs_df, campaigns_df, submits_df, deals_df)
 
         # Сохранение полученной витрины на диск в формате CSV
+        logger.info(f"Сохранение витрины данных в {cfg.OUTPUT_PATH}")
+
         customer_detailed.write \
             .mode("overwrite") \
             .option("header", True) \
-            .csv(f"{OUTPUT_PATH}/customer_detailed")
+            .csv(f"{cfg.OUTPUT_PATH}/customer_detailed")
 
-        input("Spark UI доступен в браузере. Для завершения сессии нажмите Enter...")
+        logger.info("Пайплайн успешно завершил работу")
 
     finally:
         spark.stop()
+        
+        logger.info("Спарк сессия остановлена")
+
+
+if __name__ == "__main__":
+    main()
