@@ -150,17 +150,17 @@ def main():
     spark = get_spark_session()
 
     try:
-        # Чтение входных данных из директории
-        logger.info(f"Чтение входных данных из {cfg.INPUT_PATH}")
+        # Чтение входных данных из бакета S3
+        logger.info(f"Чтение входных данных из raw бакета S3")
 
-        visits_raw = spark.read.csv(f'{cfg.INPUT_PATH}/visits_clickhouse.csv', header = True)
-        costs_raw = spark.read.csv(f'{cfg.INPUT_PATH}/costs_postgres.csv', header = True)
-        campaigns_raw = spark.read.csv(f'{cfg.INPUT_PATH}/campaigns_dict.csv', header = True) 
-        submits_raw = spark.read.parquet(f'{cfg.INPUT_PATH}/submits.parquet')
-        deals_raw = spark.read.parquet(f'{cfg.INPUT_PATH}/deals.parquet')
+        visits_raw = spark.read.csv("s3a://raw/visits_clickhouse.csv", header=True)
+        costs_raw = spark.read.csv("s3a://raw/costs_postgres.csv", header=True)
+        campaigns_raw = spark.read.csv("s3a://raw/campaigns_dict.csv", header=True)
+        submits_raw = spark.read.parquet("s3a://raw/submits.parquet")
+        deals_raw = spark.read.parquet("s3a://raw/deals.parquet")
 
         # Подготовка данных в отдельных функциях
-        logger.info(f"Обработка входных данных")
+        logger.info(f"Обработка полученных данных")
 
         visits_df = prepare_visits(visits_raw)
         costs_df = prepare_costs(costs_raw)
@@ -173,13 +173,13 @@ def main():
 
         customer_detailed = data_mart_build(visits_df, costs_df, campaigns_df, submits_df, deals_df)
 
-        # Сохранение полученной витрины на диск в формате CSV
-        logger.info(f"Сохранение витрины данных в {cfg.OUTPUT_PATH}")
+        # Сохранение полученной витрины в бакет S3 в формате CSV
+        logger.info(f"Сохранение витрины данных в mart бакет S3")
 
         customer_detailed.write \
             .mode("overwrite") \
             .option("header", True) \
-            .csv(f"{cfg.OUTPUT_PATH}/customer_detailed")
+            .csv("s3a://mart/customer_detailed")
 
         logger.info("Пайплайн успешно завершил работу")
 
