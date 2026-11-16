@@ -109,7 +109,7 @@ def data_mart_build(visits_df: DataFrame, costs_df: DataFrame, campaigns_df: Dat
             'left'
         ) \
         .select(
-            'v.dt',
+            F.col('v.dt').cast('date'),
             F.col('v.visitid').alias('visit_id'),
             F.col('v.clientid').alias('client_id'),
             'v.url',
@@ -118,14 +118,14 @@ def data_mart_build(visits_df: DataFrame, costs_df: DataFrame, campaigns_df: Dat
             'v.utmcampaign',
             'v.event_type',
             'v.event_id',
-            's.submit_id',
+            F.col('s.submit_id').cast('int'),
             's.name',
             's.phone',
             's.phone_plus',
             's.phone_md5',
             's.phone_plus_md5',
-            'd.deal_id',
-            'd.deal_date',
+            F.col('d.deal_id').cast('int'),
+            F.col('d.deal_date').cast('date'),
             'd.fio',
             F.col('d.phone').alias('phone_deal'),
             'd.email',
@@ -135,8 +135,8 @@ def data_mart_build(visits_df: DataFrame, costs_df: DataFrame, campaigns_df: Dat
             'camp.campaign_name',
             'camp.campaign_duration',
             'c.costs',
-            'c.clicks',
-            'c.views'
+            F.col('c.clicks').cast('int'),
+            F.col('c.views').cast('int')
         )
 
 
@@ -173,15 +173,26 @@ def main():
 
         customer_detailed = data_mart_build(visits_df, costs_df, campaigns_df, submits_df, deals_df)
 
-        # Сохранение полученной витрины в бакет S3 в формате CSV
-        logger.info(f"Сохранение витрины данных в mart бакет S3")
+        # Сохранение полученной витрины в ClickHouse
+        logger.info(f"Сохранение витрины данных ClickHouse")
+
+        jdbc_url = (
+            f"jdbc:clickhouse://{cfg.CLICKHOUSE_HOST}:"
+            f"{cfg.CLICKHOUSE_PORT}/{cfg.CLICKHOUSE_DB}"
+        )
 
         customer_detailed.write \
-            .mode("overwrite") \
-            .option("header", True) \
-            .csv("s3a://mart/customer_detailed")
+            .format("jdbc") \
+            .option("url", jdbc_url) \
+            .option("dbtable", "default.customer_detailed") \
+            .option("user", cfg.CLICKHOUSE_USER) \
+            .option("password", cfg.CLICKHOUSE_PASSWORD) \
+            .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
+            .option("batchsize", "10000") \
+            .mode("append") \
+            .save()
 
-        logger.info("Пайплайн успешно завершил работу")
+        logger.info(f"Витрина загружена в ClickHouse")
 
     finally:
         spark.stop()
