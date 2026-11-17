@@ -158,7 +158,14 @@ def main():
             .option("password", cfg.CLICKHOUSE_PASSWORD) \
             .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
             .load()
-        costs_raw = spark.read.csv("s3a://raw/costs_postgres.csv", header=True)
+        costs_raw = spark.read \
+            .format("jdbc") \
+            .option("url", f"jdbc:postgresql://{cfg.POSTGRES_HOST}:{cfg.POSTGRES_PORT}/{cfg.POSTGRES_DB}") \
+            .option("dbtable", "public.costs") \
+            .option("user", cfg.POSTGRES_USER) \
+            .option("password", cfg.POSTGRES_PASSWORD) \
+            .option("driver", "org.postgresql.Driver") \
+            .load()
         campaigns_raw = spark.read.csv("s3a://raw/campaigns_dict.csv", header=True)
         submits_raw = spark.read.parquet("s3a://raw/submits.parquet")
         deals_raw = spark.read.parquet("s3a://raw/deals.parquet")
