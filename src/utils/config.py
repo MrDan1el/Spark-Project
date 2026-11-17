@@ -14,3 +14,10 @@ CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
 CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "clickhouse")
 CLICKHOUSE_INPUT_DB = os.getenv("CLICKHOUSE_INPUT_DB", "marketing")
 CLICKHOUSE_OUTPUT_DB = os.getenv("CLICKHOUSE_OUTPUT_DB", "default")
+
+# Postgres
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "marketing")

@@ -10,7 +10,8 @@ def get_spark_session(app_name: str = "spark-pipeline") -> SparkSession:
         .config(
             "spark.jars.packages",
             "org.apache.hadoop:hadoop-aws:3.5.0,"
-            "com.clickhouse:clickhouse-jdbc:0.9.8",
+            "com.clickhouse:clickhouse-jdbc:0.9.8,"
+            "org.postgresql:postgresql:42.7.4",
         )
         # S3A-конфигурация для MinIO
         .config("spark.hadoop.fs.s3a.endpoint", cfg.S3_ENDPOINT)
