@@ -31,7 +31,21 @@ services:
         soft: 262144
         hard: 262144
 
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: marketing
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   minio_data:
   clickhouse_data:
   clickhouse_logs:
+  postgres_data:
