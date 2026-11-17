@@ -146,44 +146,37 @@ def main():
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     )
 
-    # Создание Spark сессиии
     spark = get_spark_session()
 
     try:
-        # Чтение входных данных из бакета S3
-        logger.info(f"Чтение входных данных из raw бакета S3")
-
-        visits_raw = spark.read.csv("s3a://raw/visits_clickhouse.csv", header=True)
+        logger.info(f"Чтение входных данных из источников")
+        visits_raw = spark.read \
+            .format("jdbc") \
+            .option("url", f"jdbc:clickhouse://{cfg.CLICKHOUSE_HOST}:{cfg.CLICKHOUSE_PORT}/{cfg.CLICKHOUSE_INPUT_DB}") \
+            .option("dbtable", "visits") \
+            .option("user", cfg.CLICKHOUSE_USER) \
+            .option("password", cfg.CLICKHOUSE_PASSWORD) \
+            .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
+            .load()
         costs_raw = spark.read.csv("s3a://raw/costs_postgres.csv", header=True)
         campaigns_raw = spark.read.csv("s3a://raw/campaigns_dict.csv", header=True)
         submits_raw = spark.read.parquet("s3a://raw/submits.parquet")
         deals_raw = spark.read.parquet("s3a://raw/deals.parquet")
 
-        # Подготовка данных в отдельных функциях
         logger.info(f"Обработка полученных данных")
-
         visits_df = prepare_visits(visits_raw)
         costs_df = prepare_costs(costs_raw)
         campaigns_df = prepare_campaigns(campaigns_raw)
         submits_df = prepare_submits(submits_raw)
         deals_df = prepare_deals(deals_raw)
 
-        # Сборка итоговой витрины данных
         logger.info(f"Сборка витрины данных")
-
         customer_detailed = data_mart_build(visits_df, costs_df, campaigns_df, submits_df, deals_df)
 
-        # Сохранение полученной витрины в ClickHouse
         logger.info(f"Сохранение витрины данных ClickHouse")
-
-        jdbc_url = (
-            f"jdbc:clickhouse://{cfg.CLICKHOUSE_HOST}:"
-            f"{cfg.CLICKHOUSE_PORT}/{cfg.CLICKHOUSE_DB}"
-        )
-
         customer_detailed.write \
             .format("jdbc") \
-            .option("url", jdbc_url) \
+            .option("url", f"jdbc:clickhouse://{cfg.CLICKHOUSE_HOST}:{cfg.CLICKHOUSE_PORT}/{cfg.CLICKHOUSE_OUTPUT_DB}") \
             .option("dbtable", "default.customer_detailed") \
             .option("user", cfg.CLICKHOUSE_USER) \
             .option("password", cfg.CLICKHOUSE_PASSWORD) \
@@ -191,12 +184,10 @@ def main():
             .option("batchsize", "10000") \
             .mode("append") \
             .save()
-
         logger.info(f"Витрина загружена в ClickHouse")
 
     finally:
         spark.stop()
-        
         logger.info("Спарк сессия остановлена")
 
 
