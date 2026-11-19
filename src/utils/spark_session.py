@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-import utils.config as cfg
+import src.utils.config as cfg
 
 
 def get_spark_session(app_name: str = "spark-pipeline") -> SparkSession:

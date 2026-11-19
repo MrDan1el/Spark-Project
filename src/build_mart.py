@@ -1,8 +1,8 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as F 
 
-import utils.config as cfg
-from utils.spark_session import get_spark_session
+import src.utils.config as cfg
+from src.utils.spark_session import get_spark_session
 
 import logging
 
