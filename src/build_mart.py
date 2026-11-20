@@ -5,6 +5,8 @@ import src.utils.config as cfg
 from src.utils.spark_session import get_spark_session
 
 import logging
+import requests
+from datetime import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,6 @@ def prepare_visits(visits_raw: DataFrame) -> DataFrame:
 
     return visits_raw \
         .withColumn('dt', F.date_format(F.col('visitDateTime'), 'yyyy-MM-dd')) \
-        .filter(F.col('dt').between('2024-01-01', '2025-01-27')) \
         .filter(F.col('source').isin('ad', 'direct')) \
         .filter(F.col('URL').rlike('.*checkout.*|.*add.*|.*home.*|.*contact.*|.*top50.*|.*customer-service.*|.*wishlist.*|.*sale.*|.*best-sellers.*|.*view.*|.*discount.*|.*featured.*|.*new-arrivals.*|.*settings.*|.*return-policy.*|.*edit.*|.*delete.*|.*reviews.*|.*products.*|.*about.*')) \
         .withColumn('params_regex', F.regexp_replace(F.col('params'), r'\[|\]', '')) \
@@ -140,20 +141,33 @@ def data_mart_build(visits_df: DataFrame, costs_df: DataFrame, campaigns_df: Dat
         )
 
 
-def main():
-    logging.basicConfig(
-        level=logging.INFO, 
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
+def drop_partition(table: str, date_str: str) -> None:
+    '''Удаляет партицию ClickHouse за указанную дату (идемпотентность перед INSERT).'''
+    
+    partition_key = date_str.replace("-", "")  # '2026-11-19' -> '20261119'
+    query = f"ALTER TABLE {table} DROP PARTITION '{partition_key}'"
 
-    spark = get_spark_session()
+    r = requests.post(
+        f"http://{cfg.CLICKHOUSE_HOST}:{cfg.CLICKHOUSE_PORT}/",
+        params={
+            "user": cfg.CLICKHOUSE_USER,
+            "password": cfg.CLICKHOUSE_PASSWORD,
+            "query": query,
+        },
+    )
+    # Если партиции нет — ClickHouse вернёт 200 с пустым телом. Ошибки — raise.
+    r.raise_for_status()
+
+
+def main(date_str: str) -> None:
+    spark = get_spark_session(f"build-mart-{date_str}")
 
     try:
-        logger.info("Чтение входных данных из источников")
+        logger.info(f"Чтение данных за {date_str}")
         visits_raw = spark.read \
             .format("jdbc") \
             .option("url", f"jdbc:clickhouse://{cfg.CLICKHOUSE_HOST}:{cfg.CLICKHOUSE_PORT}/{cfg.CLICKHOUSE_INPUT_DB}") \
-            .option("dbtable", "visits") \
+            .option("dbtable", f"(SELECT * FROM marketing.visits WHERE toDate(visitDateTime) = '{date_str}') AS t") \
             .option("user", cfg.CLICKHOUSE_USER) \
             .option("password", cfg.CLICKHOUSE_PASSWORD) \
             .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
@@ -161,26 +175,28 @@ def main():
         costs_raw = spark.read \
             .format("jdbc") \
             .option("url", f"jdbc:postgresql://{cfg.POSTGRES_HOST}:{cfg.POSTGRES_PORT}/{cfg.POSTGRES_DB}") \
-            .option("dbtable", "public.costs") \
+            .option("dbtable", f"(SELECT * FROM public.costs WHERE date = '{date_str}') AS t") \
             .option("user", cfg.POSTGRES_USER) \
             .option("password", cfg.POSTGRES_PASSWORD) \
             .option("driver", "org.postgresql.Driver") \
             .load()
         campaigns_raw = spark.read.csv("s3a://raw/campaigns_dict.csv", header=True)
-        submits_raw = spark.read.parquet("s3a://raw/submits.parquet")
-        deals_raw = spark.read.parquet("s3a://raw/deals.parquet")
+        submits_raw = spark.read.parquet(f"s3a://raw/submits/dt={date_str}/")
+        deals_raw = spark.read.parquet(f"s3a://raw/deals/dt={date_str}/")
 
-        logger.info("Обработка полученных данных")
+        logger.info("Трансформация полученных данных")
         visits_df = prepare_visits(visits_raw)
         costs_df = prepare_costs(costs_raw)
         campaigns_df = prepare_campaigns(campaigns_raw)
         submits_df = prepare_submits(submits_raw)
         deals_df = prepare_deals(deals_raw)
 
-        logger.info("Сборка витрины данных")
+        logger.info(f"Сборка витрины за {date_str}")
         customer_detailed = data_mart_build(visits_df, costs_df, campaigns_df, submits_df, deals_df)
 
-        logger.info("Сохранение витрины данных ClickHouse")
+        drop_partition("default.customer_detailed", date_str)
+
+        logger.info("Загрузка витрины в ClickHouse")
         customer_detailed.write \
             .format("jdbc") \
             .option("url", f"jdbc:clickhouse://{cfg.CLICKHOUSE_HOST}:{cfg.CLICKHOUSE_PORT}/{cfg.CLICKHOUSE_OUTPUT_DB}") \
@@ -195,8 +211,12 @@ def main():
 
     finally:
         spark.stop()
-        logger.info("Спарк сессия остановлена")
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(
+        level=logging.INFO, 
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    main(date_str)

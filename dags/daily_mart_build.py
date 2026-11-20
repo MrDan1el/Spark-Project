@@ -4,18 +4,18 @@ from airflow.operators.bash import BashOperator
 
 
 default_args = {
-    'owner': 'data-engineering',
+    'owner': 'user',
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
     'start_date': datetime(2024, 1, 1),
 }
 
 with DAG(
-    dag_id='pipeline',
+    dag_id='daily_mart_build',
     default_args=default_args,
     schedule='@daily',
     catchup=False,
-    tags=['etl', 'spark'],
+    tags=['etl', 'spark', 'data mart'],
 ) as dag:
 
     run_build_mart = BashOperator(

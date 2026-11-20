@@ -194,7 +194,22 @@ with DAG(
     tags=["daily", "generation"],
 ) as dag:
 
-    PythonOperator(task_id="generate_costs", python_callable=generate_costs_task)
-    PythonOperator(task_id="generate_visits", python_callable=generate_visits_task)
-    PythonOperator(task_id="generate_submits", python_callable=generate_submits_task)
-    PythonOperator(task_id="generate_deals", python_callable=generate_deals_task)
+    generate_costs = PythonOperator(
+        task_id="generate_costs", 
+        python_callable=generate_costs_task
+        )
+    
+    generate_visits = PythonOperator(
+        task_id="generate_visits", 
+        python_callable=generate_visits_task
+        )
+    
+    generate_submits = PythonOperator(
+        task_id="generate_submits", 
+        python_callable=generate_submits_task
+        )
+    
+    generate_deals = PythonOperator(
+        task_id="generate_deals", 
+        python_callable=generate_deals_task
+        )
