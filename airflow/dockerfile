@@ -1,3 +1,6 @@
+# Включаем BuildKit для лучшего кеширования
+# syntax=docker/dockerfile:1.7
+
 FROM apache/airflow:2.10.4-python3.12
 
 USER root
@@ -12,10 +15,12 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Копируем модифицированный constraint-файл внутрь образа
 COPY constraints-2.10.4.txt /tmp/constraints-2.10.4.txt
+COPY requirements.txt /tmp/requirements.txt
 
-# Устанавливаем pyspark с constraint-файлом
-RUN python3 -m pip install --no-cache-dir \
+# Устанавливаем зависимости с кешированием pip
+RUN --mount=type=cache,target=/home/airflow/.cache/pip \
+    python3 -m pip install --no-cache-dir \
     --constraint /tmp/constraints-2.10.4.txt \
-    pyspark==4.3.0
+    -r /tmp/requirements.txt
 
 USER airflow
